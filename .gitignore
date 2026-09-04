@@ -1,0 +1,40 @@
+# Python cache and tooling
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Deep learning outputs and local data
+data/
+datasets/
+checkpoints/
+models/
+logs/
+outputs/
+*.pt
+*.pth
+*.ckpt
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Operating system and editor files
+.DS_Store
+Thumbs.db
+.vscode/
