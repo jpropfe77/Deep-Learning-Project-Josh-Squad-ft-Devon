@@ -1,40 +1,15 @@
-# Python cache and tooling
-__pycache__/
-*.py[cod]
-*$py.class
-.Python
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.coverage
-htmlcov/
-
-# Virtual environments
-.venv/
-venv/
-env/
-ENV/
-
-# Jupyter
+# Jupyter Notebook checkpoints
 .ipynb_checkpoints/
 
-# Deep learning outputs and local data
-data/
-datasets/
-checkpoints/
-models/
-logs/
-outputs/
-*.pt
-*.pth
-*.ckpt
+# Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
 
-# Secrets and local configuration
-.env
-.env.*
-!.env.example
+# Virtual environments
+venv/
+env/
+.venv/
 
-# Operating system and editor files
-.DS_Store
+# Windows system files
 Thumbs.db
-.vscode/
