@@ -1,0 +1,11 @@
+The data required for the bounding area have been downloaded. The data surpasses 2GB so it cannot
+be uploaded to github. Below are the websites where data was downloaded from. The .shp file inside
+the "MLRA 42 B bounding area" folder was used to determine what the location for data downloaded.
+
+Climate data: https://prism.oregonstate.edu/normals/
+Elevation data: https://developers.google.com/earth-engine/datasets/catalog/USGS_3DEP_10m_collection
+Geology: https://ngmdb.usgs.gov/Prodesc/proddesc_119417.htm
+reflectance data:https://earthexplorer.usgs.gov/
+SSURGO: contains a .csv that shows the dominant soil components within the bounding area and
+the ecological site associated with that component.
+MLRA 42 B bounding area: Contains the .shp file used to mask the data to our area of interest.
