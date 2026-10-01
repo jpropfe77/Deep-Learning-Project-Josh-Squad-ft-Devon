@@ -1,5 +1,7 @@
-# Header
+# Deep learning Group project
 
-## sub header
+## Josh squad ft. Devon
 
-text ext ext 
+report_ps3 contains the most up to date overall goals and objects for the project.
+The folder labled "data" contains the raw data that will be used for the project.
+
