@@ -13,3 +13,9 @@ env/
 
 # Windows system files
 Thumbs.db
+
+# Downloaded and generated geospatial data (boundary source is tracked)
+/data/raw/*
+!/data/raw/MLRA_52_2022/
+/data/covariates/
+/data/hls/
