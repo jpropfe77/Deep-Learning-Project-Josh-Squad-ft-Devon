@@ -1,11 +1,62 @@
-The data required for the bounding area have been downloaded. The data surpasses 2GB so it cannot
+The data required to fill the bounding area have been downloaded. The data surpasses 2GB so it cannot
 be uploaded to github. Below are the websites where data was downloaded from. The .shp file inside
 the "MLRA 42 B bounding area" folder was used to determine what the location for data downloaded.
+There is a an example image of each a raster opened in QGIS of each data type.
 
 Climate data: https://prism.oregonstate.edu/normals/
-Elevation data: https://developers.google.com/earth-engine/datasets/catalog/USGS_3DEP_10m_collection
+Instructions to aquire:
+1. Choose 800m, a variable, and a temporal period (monthly or annual), then click Data Download.
+2. Repeat for each variable and month you need.
+3. For this project we used 30 year anual norms for temperature, precipitation, cloud cover,
+and slope iradience. We also downloaded 30 year precipitation norms specifically for July, August,
+September to capture the monsoon rain influx.
+
+Elevation data: https://apps.nationalmap.gov/downloader/
+Instructions to aquire:
+1. Select the bounding box button and draw a bounding box around the area of data needed. 
+For our project that was roughly 29 degrees to 36 degrees north and 101 degrees to 108 
+degrees west.
+2. Scroll down the data tab, then check the box nect to elevation products. This will open a
+drop down menu of products to choose from.
+3. seclect 1/3 arc-second DEM, and check the box next to current. 
+4. For file format, select geotiff.
+5. Scroll up and select search products.
+6. Add all the files in area of interest to the cart by pressing the button that
+looks like a shopping cart with a + sign.
+7. click on your cart
+8. Selct the page icon that downloads a .txt file with download links for each file.
+9. Using Uget software select batch download and use .txt file, this will begin downloading
+the .tiff files.
+10. .txt file with download links is in the elevation folder.
+
+
+
 Geology: https://ngmdb.usgs.gov/Prodesc/proddesc_119417.htm
+Instructions to aquire:
+The geodatabase can be downloaded directly from link above. You must open the database in a GIS
+and symbolize the rock type label. prior to this step lables will need to be one hot encoded. this
+will be done in the data prcoessesing phase. Masked portion of the map will be exported as .tiff 
+for use in the model.
+
+
 reflectance data:https://earthexplorer.usgs.gov/
+Instructions to aquire:
+1. Go to https://earthexplorer.usgs.gov/ and log in. A free USGS account is required to 
+upload files and download data.
+2. On the Search Criteria tab, select GeoJSON/KML/Shapefile Upload.
+3. Choose KML and upload the MLRA 42B KML file. Confirm the polygon appears on the map.
+4. Under Date Range, set the start date to 01/01/2024 and the end date to 09/30/2026.
+5. Under Result Options, set Cloud Cover to 0–50%.
+6. Go to the Data Sets tab and expand Landsat → Landsat Collection 2 Level-2.
+7. Check Landsat 8-9 OLI/TIRS C2 L2.
+8. Click Results.
+9. Download the scenes, either individually or by adding them to a bulk order and using the 
+Bulk Download Web Application (Chrome or Edge).
+
+
 SSURGO: contains a .csv that shows the dominant soil components within the bounding area and
-the ecological site associated with that component.
-MLRA 42 B bounding area: Contains the .shp file used to mask the data to our area of interest.
+the ecological site associated with that component. this will be used in validation process.
+
+
+MLRA 42 B bounding area: Contains the .shp file and .kml file used to mask the data to our 
+area of interest. and select the Area of interest on data download sites.
