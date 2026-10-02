@@ -3,6 +3,8 @@ be uploaded to github. Below are the websites where data was downloaded from. Th
 the "MLRA 42 B bounding area" folder was used to determine what the location for data downloaded.
 There is a an example image of each a raster opened in QGIS of each data type.
 
+One drive link to data folder: https://eltnmsu-my.sharepoint.com/:f:/g/personal/jpropfe_nmsu_edu/IgAAtDFUSA9ORo4Gs-dHENYyAQtCs0IArNUM1HWuJ8yS7H0?e=Q6Jo5C
+
 Climate data: https://prism.oregonstate.edu/normals/
 Instructions to aquire:
 1. Choose 800m, a variable, and a temporal period (monthly or annual), then click Data Download.
