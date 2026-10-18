@@ -83,11 +83,6 @@ Of 23 candidate layers, **19 were retained** after a variance inflation factor (
 | Climate (3) | `prism_ppt`, `prism_tmax`, `prism_solclear` |
 | Soil (6) | `anylithicdpt_cm_p`, `caco3_30_cm_p`, `caco3_150_cm_p`, `claytotal_30_cm_p`, `fragvol_0_cm_p`, `fragvol_30_cm_h` |
 
-All layers are aligned to one 30 m grid matching the STEDIS terrain grid, limited to MLRA 42B plus a 5 km buffer, and converted to z-scores. The report describes each layer and why it is used. Known issues with the current stack, which `02_build_covariate_stack_v2.R` fixes, are also listed there:
-- aspect in raw degrees
-- the `_h` rock-fragment layer
-- near-constant clear-sky radiation
-- skewed layers
 
 ## Software requirements
 
