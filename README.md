@@ -1,123 +1,115 @@
 # Unsupervised Deep Learning for Ecological Site Groups in MLRA 42B
 
-**Team:** Joshua Propfe, Devon Sookhu, Joshua Wilson
+Group members: Joshua Propfe, Devon Sookhu, Joshua Wilson
 
-## Overview
+A convolutional autoencoder compresses 32 × 32-pixel patches of a 20-channel
+environmental covariate stack into 16-number fingerprints, which are clustered
+with k-means into candidate ecological site groups. See `report_ps5.pdf` for
+the full description and current results.
 
-Ecological sites describe how soil, climate, and topography control which plant communities a piece of land can support and how it responds to disturbance. In practice, ecological site maps are made by linking ecological sites to soil survey (SSURGO) map units rather than by mapping them directly, and USDA is moving toward broader **ecological site groups**.
+## Repository contents
 
-This project asks whether an **unsupervised convolutional autoencoder** can divide **MLRA 42B (Southern Rio Grande Rift)** into ecologically meaningful groups using only environmental raster data, and where those groups agree or disagree with mapped ecological sites.
+| Path | What it is |
+| --- | --- |
+| `src/01_clip_covariates.R` | Clips CONUS-wide rasters to MLRA 42B + 5 km buffer |
+| `src/02_build_covariate_stack.R` | Aligns, transforms, screens (VIF), and z-scores layers into one stack |
+| `src/03_autoencoder_first_test.py` | Autoencoder training, clustering, baseline, and exports (one file) |
+| `diagnostics/` | Manifest, VIF results, correlation matrix, z-score statistics, channel order |
+| `results/` | Outputs from the first run (log, metrics, plots) |
+| `report_ps5.pdf` | Stage 5 report |
 
-The full problem statement, dataset description, methods, and preliminary results are in **[`report_ps4.pdf`](report_ps4.pdf)**.
+<!-- EDIT: make the table match your repo's actual folders. -->
 
-## Current status
+## Data
 
-| Stage | Status |
-|---|---|
-| Data acquisition (PRISM, SOLUS, STEDIS, MLRA boundary) | Done |
-| Clipping rasters to MLRA 42B (`01_clip_covariates.R`) | Done |
-| Building the 19-layer covariate stack (`02_build_covariate_stack.R`) | Done |
+The rasters are too large for the repository. Sources:
 
+- **PRISM** 1991–2020 30-year normals (precipitation, temperature, clear-sky radiation): https://prism.oregonstate.edu
+- **SOLUS** soil property predictions (Nauman et al., 2024): https://doi.org/10.1002/saj2.20769
+- **STEDIS** terrain and spectral derivatives (not yet published; contact the authors)
+- **NRCS MLRA boundaries**: https://www.nrcs.usda.gov/resources/data-and-reports/major-land-resource-area-mlra
 
-## Repository structure
+<!-- EDIT: confirm each link and add the STEDIS citation. -->
 
-```
-.
-├── README.md
-├── report_ps4.pdf                  # project report for this stage
-├── .gitignore                      
-├── src/                            # all code
-│   ├── 01_clip_covariates.R
-│   ├── 02_build_covariate_stack.R
-├
-│   
-  ── preprocessing/              # small diagnostic outputs from building the stack
-        ├── clip_log.csv
-        └── covariate_manifest.csv      # list of input layers, types, and file paths
-        ├── vif_dropped.csv
-        ├── correlation_matrix.csv
-        └── zscore_stats.csv
-```
+## Requirements
 
-**Raster data are not included** because the files are too large for GitHub (each CONUS raster is roughly 15 GB, and the final 30 m stack is about 3 GB). The sections below explain where to get the data and how to rebuild the stack.
+- **R** (≥ 4.2) with the `terra` package: `install.packages("terra")`
+- **Python** ≥ 3.9. The Python script installs its own packages (PyTorch,
+  rasterio, scikit-learn, geopandas, matplotlib, pandas, numpy) into a
+  `pylibs` folder on first run, so no manual install is needed.
+- **Hardware:** an NVIDIA GPU is recommended (a full run took ~6 minutes on an
+  H100). CPU mode works on a 16 GB PC but training takes roughly 1–6 hours.
+- **Disk:** ~3 GB for the stack, ~5–7 GB for GPU PyTorch (~1–2 GB for CPU-only).
 
-## Data sources
-
-### Model inputs
-
-| Group | Layers used | Resolution | Source |
-|---|---|---|---|
-| **Climate** | Mean annual precipitation, maximum temperature, mean temperature, minimum temperature, clear-sky solar radiation (1991–2020 normals) | 800 m | **PRISM Climate Group, Oregon State University:** https://prism.oregonstate.edu/normals/ |
-| **Soil properties** | CaCO₃ (30 and 150 cm), clay (15 and 30 cm), rock fragment volume (0 and 30 cm), depth to lithic contact | 100 m | **SOLUS100** (Soil Landscapes of the United States), USDA-NRCS: https://www.nrcs.usda.gov/resources/data-and-reports/soil-landscapes-of-the-united-states-solus — also available in Google Earth Engine as `USDA/SOLUS100/V0`: https://developers.google.com/earth-engine/datasets/catalog/USDA_SOLUS100_V0 |
-| **Terrain** | Slope, aspect, percentile elevation, relative mean elevation, mean elevation, topographic position index, SAGA wetness index, vertical distance to channel network | 30 m | **STEDIS** (unpublished; see note below) |
-| **Spectral** | Landsat band 5 (change-free composite), NDVI interquartile range, NDVI trend since 2000 | 30 m | **STEDIS** (unpublished; see note below) |
-
-**Note on STEDIS:** The terrain and spectral layers come from **STEDIS, an unpublished dataset** of standardized terrain and spectral derivatives for the conterminous United States, derived from public data (USGS 3DEP elevation and Landsat imagery). These layers are not publicly available yet, so they cannot be downloaded from a public source. 
-
-
-### Study area boundary
-
-| Data | Source |
-|---|---|
-| MLRA 42B boundary | **USDA-NRCS 2022 MLRA Geographic Database (v5.2):** https://www.nrcs.usda.gov/resources/data-and-reports/major-land-resource-area-mlra |
-
-### Validation data (used in later stages, not model inputs)
-
-| Data | Source |
-|---|---|
-| Soil survey map units and components (SSURGO) | **Web Soil Survey:** https://websoilsurvey.nrcs.usda.gov/ |
-| Ecological Site Descriptions | **EDIT (Ecosystem Dynamics Interpretive Tool):** https://edit.jornada.nmsu.edu/ |
-
-## The covariate stack
-
-Of 23 candidate layers, **19 were retained** after a variance inflation factor (VIF) screen removed near-duplicates:
-- mean temperature (VIF ≈ 268,000; PRISM computes it from maximum and minimum temperature)
-- mean elevation (81.3)
-- clay at 15 cm (12.4)
-- minimum temperature (6.2)
-
-| Group | Layers in final stack |
-|---|---|
-| Terrain (7) | `sl_32`, `aspct_32`, `perctelev_32`, `relmeanelev_32`, `tpi_32`, `swi_10`, `vdcn_5` |
-| Spectral (3) | `US_6Band_ChangeFree_mosaic_B5`, `NDVI_90_IQR`, `NDVI_Trend_post2000_linearFit` |
-| Climate (3) | `prism_ppt`, `prism_tmax`, `prism_solclear` |
-| Soil (6) | `anylithicdpt_cm_p`, `caco3_30_cm_p`, `caco3_150_cm_p`, `claytotal_30_cm_p`, `fragvol_0_cm_p`, `fragvol_30_cm_h` |
-
-
-## Software requirements
-
-**R** (4.3 or later recommended)
-- `terra`
 
 
 ## How to run
 
-Each script has clearly marked **`>>> EDIT <<<`** sections at the top for file paths and options. Set `project_dir` to the folder containing the downloaded data, and use forward slashes (`/`) in paths, even on Windows.
+### Step 1–2: Build the covariate stack (R)
 
-### Step 1: Clip rasters to MLRA 42B (R)
+Edit the settings section at the top of each script (input and output paths),
+then run from the repository root:
+
+```bash
+Rscript src/01_clip_covariates.R
+Rscript src/02_build_covariate_stack.R
 ```
-src/01_clip_covariates.R
+
+This produces `covariate_stack_42b.tif` (20 bands), `aoi_mask_42b.tif`,
+`channel_order.csv`, and `zscore_stats.csv`.
+
+### Step 3: Train the autoencoder and cluster (Python)
+
+Put the four files from step 2 in one folder (the data folder), then run:
+
+```bash
+# GPU (default)
+python3 src/03_autoencoder_first_test.py --base_dir /path/to/data_folder
+
+# CPU 
+python3 src/03_autoencoder_first_test.py --base_dir /path/to/data_folder --device cpu
 ```
-- **Inputs:** CONUS-wide rasters in a `Raw/` folder (one subfolder per covariate is fine), and the MLRA shapefile.
-- **What it does:** selects MLRA 42B, buffers it by 5 km, and crops and masks each raster in its native projection. It skips finished layers on rerun and logs failures without stopping.
-- **Outputs:** `out/clipped/*_42B.tif`, `out/clipped/clip_log.csv`, and the boundary files in `aoi/`.
 
-### Step 2: Build the covariate stack (R)
+On Windows, use `python` instead of `python3`.
+
+To keep a long run going after you log out of a remote server:
+
+```bash
+nohup python3 src/03_autoencoder_first_test.py --base_dir /path/to/data_folder > run.out 2>&1 &
+tail -f run.out
 ```
-src/02_build_covariate_stack_v2.R
-```
-- **First run:** creates or updates `covariate_manifest.csv` and stops. Review the `type`, `group`, and `transform` columns in Excel, save, **close Excel**, and run again.
-- **What it does:** aligns all layers to the 30 m grid, applies transforms (aspect to northness and eastness, log10 for skewed layers), removes cells with missing data, runs the VIF screen (key layers can be protected), converts layers to z-scores, and writes the stack in a single pass.
-- **Outputs (in `out/stack/`):** `covariate_stack_42B.tif`, `channel_order.csv`, `zscore_stats.csv`, `aoi_mask_42B.tif`, plus diagnostics (`vif_dropped.csv`, `vif_final.csv`, `correlation_matrix.csv`, `na_report.csv`, `preview_all_channels.png`).
-- `02_build_covariate_stack.R` is the original version used to build the current 19-layer stack. It is kept for reproducibility.
 
+Useful options (any setting in the script's `SETTINGS` block can be overridden):
 
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `--base_dir` | folder containing the script | Folder with the input files; outputs are written here too |
+| `--device` | `cuda` | `cuda`, `cpu`, or `auto` |
+| `--n_patches` | `10000` | Number of 32 × 32 patches sampled |
+| `--k_min`, `--k_max` | `3`, `12` | Range of cluster counts tested |
+| `--resume` | `false` | `true` continues an interrupted training run |
+| `--lib_dir` | `<base_dir>/pylibs` | Where Python packages are installed |
+| `--install_only` | `false` | `true` installs packages and exits |
 
-### Typical run times
-These depend heavily on disk speed and hardware. Keep all working files on an internal SSD.
-- **Clipping:** minutes per layer.
-- **Stack building:** roughly 30 minutes to an hour for the full 30 m extent.
+### Outputs
 
-## Acknowledgments
+Written to `<base_dir>/outputs/ae_first_test/`:
 
-Code development, troubleshooting, and parts of the documentation were assisted by Claude (Anthropic), an AI assistant. All scripts were reviewed, run, and tested by the team.
+| File | Contents |
+| --- | --- |
+| `run_log.txt`, `run_config.json` | Full log and every setting used |
+| `completeness_report.json`, `missing_by_channel_in_aoi.csv` | Data completeness |
+| `complete_patch_centers.tif` | Where complete patches can be centered (open in GIS) |
+| `training_history.csv`, `loss_curves.png` | Training and validation loss |
+| `per_channel_val_r2.csv`, `per_channel_val_r2.png` | Reconstruction R² per channel |
+| `reconstruction_examples.png` | Original vs. rebuilt patches |
+| `kmeans_metrics.csv`, `kmeans_selection.png` | Elbow, silhouette, stability, baseline agreement |
+| `fingerprints.npz` | 16-number fingerprints and patch locations |
+| `patch_centers_clusters.gpkg` | Patch centers with group labels for every k (open in GIS) |
+| `model_best.pt` | Trained model weights |
+
+## Reproducibility
+
+A fixed seed (42) makes patch sampling and the train/validation split
+repeatable. GPU training is not bit-for-bit deterministic, so retrained models
+may differ slightly.
