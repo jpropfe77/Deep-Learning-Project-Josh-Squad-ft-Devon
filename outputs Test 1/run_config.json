@@ -1,0 +1,42 @@
+{
+  "stack_path": "/home/gojironobackup/jpropfe/ae42b/covariate_stack_42b.tif",
+  "mask_path": "/home/gojironobackup/jpropfe/ae42b/aoi_mask_42b.tif",
+  "channel_order_path": "/home/gojironobackup/jpropfe/ae42b/channel_order.csv",
+  "zscore_stats_path": "/home/gojironobackup/jpropfe/ae42b/zscore_stats.csv",
+  "zero_fill_channels": [
+    "caco3_150"
+  ],
+  "out_dir": "/home/gojironobackup/jpropfe/ae42b/outputs/ae_first_test",
+  "patch_size": 32,
+  "n_patches": 10000,
+  "block_size": 128,
+  "val_frac": 0.2,
+  "latent_dim": 16,
+  "batch_size": 128,
+  "lr": 0.001,
+  "max_epochs": 200,
+  "early_stop_patience": 8,
+  "lr_patience": 3,
+  "lr_factor": 0.5,
+  "num_workers": 0,
+  "resume": false,
+  "k_min": 3,
+  "k_max": 12,
+  "kmeans_n_init": 10,
+  "n_bootstrap": 20,
+  "silhouette_sample": 5000,
+  "standardize_latent": true,
+  "pca_var": 0.9,
+  "seed": 42,
+  "device": "cuda",
+  "cpu_threads": 0,
+  "install_only": false,
+  "lib_dir": "",
+  "n_example_patches": 4,
+  "example_channels": [
+    "sl_32",
+    "caco3_30",
+    "prism_ppt",
+    "NDVI_90_IQR"
+  ]
+}
