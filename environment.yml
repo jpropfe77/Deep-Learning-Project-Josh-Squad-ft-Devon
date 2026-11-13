@@ -1,0 +1,22 @@
+name: mlra-42b
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - numpy
+  - pandas
+  - rasterio
+  - scikit-learn
+  - geopandas
+  - pyproj
+  - shapely
+  - matplotlib
+  - pytorch
+
+### Setup ###
+# conda env create -f environment.yml
+
+### Add New Package ###
+# Add to the list of dependencies above and then run:
+# conda env update -f environment.yml
+

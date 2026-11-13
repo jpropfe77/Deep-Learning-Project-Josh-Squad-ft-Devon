@@ -42,24 +42,33 @@ Options (add after the script name)
 """
 
 import argparse
-import importlib
-import importlib.util
 import json
 import logging
 import os
-import platform
 import random
-import re
-import subprocess
 import sys
 import time
+import rasterio
+from rasterio.windows import Window
 from pathlib import Path
+import matplotlib; matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import numpy as np   # noqa: E402
+import pandas as pd  # noqa: E402
+import torch.nn as nn
+import torch
+from torch.utils.data import DataLoader, TensorDataset
+from sklearn.cluster import KMeans
+from sklearn.decomposition import PCA
+from sklearn.metrics import adjusted_rand_score, silhouette_score
+from sklearn.preprocessing import StandardScaler
+import geopandas as gpd
+from rasterio.transform import xy
 
 # =============================================================================
 # Package installer (runs before numpy/pandas/torch are imported)
 # =============================================================================
 # ---- Project folder: data in, results out, packages installed here ----
-BASE_DIR = Path("/home/gojironobackup/jpropfe/ae42b")
 
 
 def _argv_value(flag):
@@ -70,93 +79,15 @@ def _argv_value(flag):
     return None
 
 
-LIB_DIR = Path(_argv_value("--lib_dir") or (BASE_DIR / "pylibs"))
 DEVICE_CHOICE = (_argv_value("--device") or "cuda").lower()
-REQUIRED = {  # import name -> pip name
-    "numpy": "numpy", "pandas": "pandas", "rasterio": "rasterio",
-    "sklearn": "scikit-learn", "geopandas": "geopandas", "pyproj": "pyproj",
-    "shapely": "shapely", "matplotlib": "matplotlib", "torch": "torch",
-}
-
-
-def _torch_index_url():
-    """Pick which PyTorch build to download."""
-    system = platform.system()
-    if DEVICE_CHOICE == "cpu":
-        # Linux/Windows: the CPU-only build is far smaller than the default.
-        # macOS: the default PyPI build is already CPU (no CUDA).
-        return None if system == "Darwin" else "https://download.pytorch.org/whl/cpu"
-    try:
-        out = subprocess.run(["nvidia-smi"], capture_output=True, text=True,
-                             timeout=30).stdout
-    except Exception:
-        return None
-    m = re.search(r"CUDA Version:\s*(\d+)\.(\d+)", out)
-    if not m:
-        return None
-    v = int(m.group(1)) * 100 + int(m.group(2))
-    for thr, tag in ((1208, "cu128"), (1206, "cu126"), (1204, "cu124"),
-                     (1201, "cu121"), (1108, "cu118")):
-        if v >= thr:
-            return f"https://download.pytorch.org/whl/{tag}"
-    return None
-
-
-def ensure_packages():
-    if sys.version_info < (3, 9):
-        sys.exit(f"Python >= 3.9 required; found {sys.version.split()[0]}.")
-    if not BASE_DIR.is_dir():
-        sys.exit(f"Project folder not found: {BASE_DIR}\n"
-                 "  Create it and put the data files there, or edit BASE_DIR.")
-    LIB_DIR.mkdir(parents=True, exist_ok=True)
-    sys.path.insert(0, str(LIB_DIR))
-    missing = [pip for mod, pip in REQUIRED.items()
-               if importlib.util.find_spec(mod) is None]
-    if not missing:
-        return
-    print(f"[setup] Installing into {LIB_DIR}: {', '.join(missing)}", flush=True)
-    base = [sys.executable, "-m", "pip", "install", "--no-cache-dir",
-            "--target", str(LIB_DIR)]
-    try:
-        if "torch" in missing:
-            url = _torch_index_url()
-            cmd = base + ["torch"] + (["--index-url", url] if url else [])
-            print(f"[setup] PyTorch from: {url or 'PyPI default'}", flush=True)
-            subprocess.run(cmd, check=True)
-            missing.remove("torch")
-        if missing:
-            subprocess.run(base + missing, check=True)
-    except subprocess.CalledProcessError as e:
-        sys.exit(f"[setup] pip install failed ({e}).\n"
-                 "  Scroll up for the cause. Common ones: 'Disk quota exceeded' "
-                 "(use --lib_dir on a disk with more space), or no internet access.")
-    except FileNotFoundError:
-        sys.exit("[setup] pip not found. Try: python -m ensurepip --user")
-    importlib.invalidate_caches()
-
-
-ensure_packages()
-if "--install_only" in sys.argv:
-    i = sys.argv.index("--install_only")
-    if i + 1 < len(sys.argv) and sys.argv[i + 1].lower() in ("1", "true", "yes"):
-        print("[setup] Packages installed; exiting (--install_only).")
-        sys.exit(0)
-
-import numpy as np   # noqa: E402
-import pandas as pd  # noqa: E402
 
 # =============================================================================
 # SETTINGS  (edit here, or override any scalar from the command line)
 # =============================================================================
 SETTINGS = dict(
-    # --- files ---
-    stack_path=str(BASE_DIR / "covariate_stack_42b.tif"),
-    mask_path=str(BASE_DIR / "aoi_mask_42b.tif"),          # 1 = inside MLRA 42B, 0 = buffer
-    channel_order_path=str(BASE_DIR / "channel_order.csv"),
-    zscore_stats_path=str(BASE_DIR / "zscore_stats.csv"),
+    base_dir=str("/home/gojironobackup/jpropfe/ae42b"), # TODO: Security Issue: hide personal information!
     # channels where missing = true zero (filled with the z-score of 0)
     zero_fill_channels=["caco3_150"],
-    out_dir=str(BASE_DIR / "outputs" / "ae_first_test"),
     # --- patches & split ---
     patch_size=32,
     n_patches=10000,
@@ -219,7 +150,6 @@ def setup_logging(out_dir: Path):
 
 
 def set_seed(seed):
-    import torch
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -236,7 +166,6 @@ def _to_nan(a, nodata):
 
 
 def stack_info(path, log):
-    import rasterio
     with rasterio.open(path) as src:
         info = dict(C=src.count, H=src.height, W=src.width, nodata=src.nodata,
                     transform=src.transform, crs=src.crs,
@@ -253,7 +182,6 @@ def stack_info(path, log):
 
 
 def load_mask(path, info, log):
-    import rasterio
     with rasterio.open(path) as src:
         if (src.height, src.width) != (info["H"], info["W"]):
             raise ValueError(f"Mask shape {(src.height, src.width)} != stack shape "
@@ -279,13 +207,13 @@ def load_channel_names(path, n_bands, descriptions, log):
     return [d if d else f"band_{i+1}" for i, d in enumerate(descriptions)]
 
 
-def zero_fill_values(names, cfg, log):
+def zero_fill_values(names, cfg, log, zscore_stats_path):
     """{band index: z-score of raw 0} for channels where missing means 0."""
     targets = [i for i, n in enumerate(names)
                if any(sub in n for sub in cfg["zero_fill_channels"])]
     if not targets:
         return {}
-    stats = pd.read_csv(cfg["zscore_stats_path"]).set_index("name")
+    stats = pd.read_csv(zscore_stats_path).set_index("name")
     out = {}
     for t in targets:
         n = names[t]
@@ -302,7 +230,6 @@ def zero_fill_values(names, cfg, log):
 def scan_stack(info, path, aoi, names, fills, out_dir, log):
     """Read one band at a time; return a 2-D 'valid' map (all channels usable
     after zero-fill) and write the per-channel missing report."""
-    import rasterio
     C, H, W = info["C"], info["H"], info["W"]
     valid = np.ones((H, W), dtype=bool)
     target_nan, rows = {}, []
@@ -341,7 +268,6 @@ def scan_stack(info, path, aoi, names, fills, out_dir, log):
 # =============================================================================
 def find_candidate_patches(valid, aoi, info, P, B, out_dir, log):
     """Top-left (row, col) of every eligible, complete patch."""
-    import rasterio
     H, W = valid.shape
     S = np.zeros((H + 1, W + 1), dtype=np.int32)
     np.cumsum(~valid, axis=0, dtype=np.int32, out=S[1:, 1:])
@@ -405,8 +331,6 @@ def sample_and_split(rows, cols, cfg, W, rng, log):
 
 def extract_patches(path, info, r, c, P, fills, log):
     """Read each patch window straight from disk (in row order for speed)."""
-    import rasterio
-    from rasterio.windows import Window
     X = np.empty((len(r), info["C"], P, P), dtype=np.float32)
     order = np.lexsort((c, r))
     t0 = time.time()
@@ -429,7 +353,6 @@ def extract_patches(path, info, r, c, P, fills, log):
 # Model
 # =============================================================================
 def build_model(C, latent_dim, P):
-    import torch.nn as nn
 
     def enc_block(i, o):
         return nn.Sequential(nn.Conv2d(i, o, 3, padding=1), nn.BatchNorm2d(o),
@@ -470,8 +393,6 @@ def build_model(C, latent_dim, P):
 # Training
 # =============================================================================
 def train(model, X_tr, X_va, cfg, device, out_dir, log):
-    import torch
-    from torch.utils.data import DataLoader, TensorDataset
 
     pin = device.type == "cuda"
     g = torch.Generator().manual_seed(cfg["seed"])
@@ -543,7 +464,6 @@ def train(model, X_tr, X_va, cfg, device, out_dir, log):
 # Diagnostics
 # =============================================================================
 def predict(model, X, device, bs=512, encode_only=False):
-    import torch
     model.eval()
     out = []
     with torch.no_grad():
@@ -571,8 +491,6 @@ def per_channel_r2(model, X_va, names, device, out_dir, log):
 
 
 def plot_losses(hist, out_dir):
-    import matplotlib; matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=(6, 4))
     ax.plot(hist.epoch, hist.train_loss, label="train")
     ax.plot(hist.epoch, hist.val_loss, label="validation")
@@ -581,8 +499,6 @@ def plot_losses(hist, out_dir):
 
 
 def plot_r2(df, out_dir):
-    import matplotlib; matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=(6, 0.3 * len(df) + 1))
     ax.barh(df.channel, df.val_r2); ax.set_xlabel("validation R²")
     ax.axvline(0, color="k", lw=0.5)
@@ -591,8 +507,6 @@ def plot_r2(df, out_dir):
 
 
 def plot_examples(model, X_va, names, cfg, device, rng, out_dir):
-    import matplotlib; matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
     ch = []
     for sub in cfg["example_channels"]:
         hits = [i for i, n in enumerate(names) if sub in n]
@@ -618,10 +532,6 @@ def plot_examples(model, X_va, names, cfg, device, rng, out_dir):
 # Clustering
 # =============================================================================
 def cluster_sweep(Z, Xc, cfg, out_dir, log):
-    from sklearn.cluster import KMeans
-    from sklearn.decomposition import PCA
-    from sklearn.metrics import adjusted_rand_score, silhouette_score
-    from sklearn.preprocessing import StandardScaler
 
     seed = cfg["seed"]
     rng = np.random.default_rng(seed)
@@ -668,8 +578,6 @@ def cluster_sweep(Z, Xc, cfg, out_dir, log):
 
 
 def plot_kmeans(df, out_dir):
-    import matplotlib; matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
     fig, ax = plt.subplots(1, 3, figsize=(13, 3.5))
     ax[0].plot(df.k, df.ae_inertia, "o-"); ax[0].set_title("Elbow (AE inertia)")
     ax[1].plot(df.k, df.ae_silhouette, "o-", label="autoencoder")
@@ -684,8 +592,6 @@ def plot_kmeans(df, out_dir):
 
 def export_points(r, c, P, block_id, is_val, ae_labels, base_labels,
                   transform, crs, out_dir, log):
-    import geopandas as gpd
-    from rasterio.transform import xy
     h = P // 2
     xs, ys = xy(transform, r + h, c + h, offset="center")
     data = dict(row=r + h, col=c + h, block_id=block_id,
@@ -705,10 +611,17 @@ def export_points(r, c, P, block_id, is_val, ae_labels, base_labels,
 # Main
 # =============================================================================
 def main():
+
     cfg = parse_args()
-    out_dir = Path(cfg["out_dir"])
+
+    BASE_DIR = Path(cfg["base_dir"])
+    STACK_PATH = Path(BASE_DIR / "covariate_stack_42B.tif")
+    MASK_PATH = Path(BASE_DIR / "aoi_mask_42B.tif")          # 1 = inside MLRA 42B, 0 = buffer
+    CHANNEL_ORDER_PATH = Path(BASE_DIR / "channel_order.csv")
+    ZSCORE_STATS_PATH = Path(BASE_DIR / "zscore_stats.csv")
+    out_dir = Path(BASE_DIR / "outputs" / "ae_first_test")
+
     log = setup_logging(out_dir)
-    import torch
     set_seed(cfg["seed"])
     rng = np.random.default_rng(cfg["seed"])
 
@@ -732,12 +645,12 @@ def main():
 
     # --- data (memory-light) ---
     t0 = time.time()
-    path = cfg["stack_path"]
+    path = STACK_PATH
     info = stack_info(path, log)
     C, H, W = info["C"], info["H"], info["W"]
-    names = load_channel_names(cfg["channel_order_path"], C, info["descriptions"], log)
-    aoi = load_mask(cfg["mask_path"], info, log)
-    fills = zero_fill_values(names, cfg, log)
+    names = load_channel_names(CHANNEL_ORDER_PATH, C, info["descriptions"], log)
+    aoi = load_mask(MASK_PATH, info, log)
+    fills = zero_fill_values(names, cfg, log, ZSCORE_STATS_PATH)
     valid = scan_stack(info, path, aoi, names, fills, out_dir, log)
     rows, cols = find_candidate_patches(valid, aoi, info, P, B, out_dir, log)
     del valid, aoi
